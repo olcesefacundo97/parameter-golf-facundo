@@ -1,0 +1,7 @@
+train_tokens=28
+val_tokens=13
+artifact_path=/workspace/parameter-golf-facundo/records/track_non_record_16mb/2026-03-20_local_bigram_smoke/local_bigram_artifact.json
+val_loss=3.688879
+val_bpb=5.321928
+artifact_size_bytes=1241
+num_runs=1
