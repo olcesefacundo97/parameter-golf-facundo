@@ -25,6 +25,13 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--workdir", default=".")
     parser.add_argument("--train-script", help="Optional path to the training script to copy into the scaffold.")
     parser.add_argument(
+        "--env",
+        action="append",
+        default=[],
+        metavar="KEY=VALUE",
+        help="Environment variable to inject into the child command. Repeat as needed.",
+    )
+    parser.add_argument(
         "--no-update-metrics",
         action="store_true",
         help="Skip automatic metric extraction after the command finishes.",
@@ -60,10 +67,23 @@ def create_submission(args: argparse.Namespace) -> Path:
     return Path(created.stdout.strip())
 
 
-def update_readme_command(submission_dir: Path, command: list[str]) -> None:
+def parse_env_overrides(values: list[str]) -> dict[str, str]:
+    env_updates: dict[str, str] = {}
+    for value in values:
+        key, sep, raw = value.partition("=")
+        if not sep or not key:
+            raise SystemExit(f"Invalid --env value '{value}'. Expected KEY=VALUE.")
+        env_updates[key] = raw
+    return env_updates
+
+
+def update_readme_command(submission_dir: Path, command: list[str], env_updates: dict[str, str]) -> None:
     readme_path = submission_dir / "README.md"
     readme = readme_path.read_text(encoding="utf-8")
+    env_prefix = " ".join(f"{key}={shlex.quote(value)}" for key, value in env_updates.items())
     command_text = shlex.join(command)
+    if env_prefix:
+        command_text = f"{env_prefix} {command_text}"
     readme = readme.replace("# Replace with the exact command used for the run.", command_text)
     readme_path.write_text(readme, encoding="utf-8")
 
@@ -75,11 +95,17 @@ def copy_train_script(submission_dir: Path, train_script: str | None) -> None:
     shutil.copyfile(source, submission_dir / "train_gpt.py")
 
 
-def run_and_capture(submission_dir: Path, command: list[str], workdir: str) -> int:
+def run_and_capture(
+    submission_dir: Path,
+    command: list[str],
+    workdir: str,
+    env_updates: dict[str, str],
+) -> int:
     log_path = submission_dir / "train.log"
     child_env = dict(os.environ)
     child_env["SUBMISSION_DIR"] = str(submission_dir.resolve())
     child_env["TRAIN_LOG_PATH"] = str(log_path.resolve())
+    child_env.update(env_updates)
     with log_path.open("w", encoding="utf-8") as log_file:
         process = subprocess.Popen(
             command,
@@ -113,11 +139,12 @@ def main() -> int:
     command = args.command[1:] if args.command and args.command[0] == "--" else args.command
     if not command:
         raise SystemExit("You must provide a command after --, e.g. -- python3 train_gpt.py")
+    env_updates = parse_env_overrides(args.env)
 
     submission_dir = create_submission(args)
     copy_train_script(submission_dir, args.train_script)
-    update_readme_command(submission_dir, command)
-    exit_code = run_and_capture(submission_dir, command, args.workdir)
+    update_readme_command(submission_dir, command, env_updates)
+    exit_code = run_and_capture(submission_dir, command, args.workdir, env_updates)
     if exit_code == 0 and not args.no_update_metrics:
         update_metrics(submission_dir)
     print(submission_dir)

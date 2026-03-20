@@ -9,7 +9,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from scripts.submission_tools import slugify, VALID_TRACKS
+from scripts.submission_tools import TRACK_TO_JSON, slugify, VALID_TRACKS
 
 
 def build_readme(title: str, summary: str, template_path: Path) -> str:
@@ -26,29 +26,16 @@ def build_submission_json(
     run_date: str,
 ) -> dict:
     return {
-        "title": title,
-        "author": {
-            "name": author_name,
-            "github": github_id,
-        },
-        "track": track,
+        "track": TRACK_TO_JSON[track],
         "date": run_date,
-        "summary": summary,
-        "metrics": {
-            "val_loss": None,
-            "val_bpb": None,
-            "artifact_size_bytes": None,
-            "num_runs": None,
-        },
-        "artifacts": {
-            "train_log": "train.log",
-            "train_script": "train_gpt.py",
-            "extra_files": [],
-        },
-        "notes": [
-            "Fill in all placeholders before opening a PR against the official repo.",
-            "Include enough evidence to support statistical significance when claiming a new record.",
-        ],
+        "name": title,
+        "author": author_name,
+        "github_id": github_id,
+        "blurb": summary,
+        "val_loss": None,
+        "val_bpb": None,
+        "bytes_total": None,
+        "bytes_code": None,
     }
 
 
@@ -85,7 +72,8 @@ def main() -> int:
     submission_dir = Path(args.base_dir) / args.track / folder_name
     submission_dir.mkdir(parents=True, exist_ok=False)
 
-    title = f"{args.date} / {slug.replace('_', ' ')}"
+    human_slug = slug.replace("_", " ")
+    title = human_slug.title()
 
     readme_text = build_readme(title=title, summary=args.summary, template_path=template_path)
     (submission_dir / "README.md").write_text(readme_text, encoding="utf-8")

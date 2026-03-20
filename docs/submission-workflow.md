@@ -56,7 +56,7 @@ Cuando la carpeta esté bien armada, copiala o recreala en el árbol `records/` 
 
 ## 5. Sincronizar métricas desde el log
 
-Si tu `train.log` ya contiene líneas como `val_loss=...`, `val_bpb=...`, `artifact_size_bytes=...` o `num_runs=...`, podés actualizar `submission.json` automáticamente:
+Si tu `train.log` ya contiene líneas como `val_loss=...`, `val_bpb=...`, `bytes_total=...`, `bytes_code=...` o `num_runs=...`, podés actualizar `submission.json` automáticamente:
 
 ```bash
 python3 scripts/update_submission_metrics.py records/<track>/<fecha_slug>
@@ -68,7 +68,8 @@ También podés forzar valores manualmente:
 python3 scripts/update_submission_metrics.py records/<track>/<fecha_slug> \
   --val-loss 1.23 \
   --val-bpb 0.98 \
-  --artifact-size-bytes 12345678 \
+  --bytes-total 12345678 \
+  --bytes-code 45678 \
   --num-runs 3
 ```
 
@@ -129,7 +130,7 @@ python3 scripts/run_submission.py \
   --author-name "Tu Nombre" \
   --github-id tu_github \
   --summary "Smoke test local" \
-  -- python3 -c "print('val_loss=1.23 val_bpb=0.98 artifact_size_bytes=12345678 num_runs=1')"
+  -- python3 -c "print('val_loss=1.23 val_bpb=0.98 bytes_total=12345678 num_runs=1')"
 ```
 
 Si querés preservar el script exacto usado, agregá `--train-script path/al/train_gpt.py`.

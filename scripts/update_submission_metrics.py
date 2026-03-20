@@ -18,8 +18,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--train-log", help="Optional path to a log file. Defaults to <path>/train.log.")
     parser.add_argument("--val-loss", type=float)
     parser.add_argument("--val-bpb", type=float)
-    parser.add_argument("--artifact-size-bytes", type=int)
+    parser.add_argument("--bytes-total", type=int)
+    parser.add_argument("--bytes-code", type=int)
+    parser.add_argument("--bytes-model-int8-zlib", type=int)
     parser.add_argument("--num-runs", type=int)
+    parser.add_argument("--p-value", type=float)
     parser.add_argument(
         "--dry-run",
         action="store_true",
@@ -35,32 +38,43 @@ def main() -> int:
     train_log_path = Path(args.train_log) if args.train_log else submission_dir / "train.log"
 
     payload = read_submission_json(submission_json_path)
-    metrics = dict(payload.get("metrics", {}))
+    updates: dict[str, float | int | dict[str, dict[str, float]] | None] = {}
 
     if train_log_path.exists():
         parsed_metrics = extract_metrics_from_text(train_log_path.read_text(encoding="utf-8"))
-        metrics.update(parsed_metrics)
+        updates.update(parsed_metrics)
 
     overrides = {
         "val_loss": args.val_loss,
         "val_bpb": args.val_bpb,
-        "artifact_size_bytes": args.artifact_size_bytes,
+        "bytes_total": args.bytes_total,
+        "bytes_code": args.bytes_code,
+        "bytes_model_int8_zlib": args.bytes_model_int8_zlib,
         "num_runs": args.num_runs,
+        "p_value": args.p_value,
     }
     for key, value in overrides.items():
         if value is not None:
-            metrics[key] = value
+            updates[key] = value
 
-    payload["metrics"] = metrics
+    if updates.get("bytes_code") is None:
+        train_script_path = submission_dir / "train_gpt.py"
+        if train_script_path.exists():
+            updates["bytes_code"] = train_script_path.stat().st_size
+
+    payload.update({key: value for key, value in updates.items() if key != "num_runs"})
+    num_runs = updates.get("num_runs")
+    if num_runs is not None and payload.get("seed_results") is None:
+        payload["num_runs"] = num_runs
 
     if args.dry_run:
-        for key in ("val_loss", "val_bpb", "artifact_size_bytes", "num_runs"):
-            print(f"{key}={metrics.get(key)}")
+        for key in ("val_loss", "val_bpb", "bytes_total", "bytes_code", "bytes_model_int8_zlib", "num_runs", "p_value"):
+            print(f"{key}={payload.get(key) if key != 'num_runs' else payload.get('num_runs')}")
         return 0
 
     write_submission_json(submission_json_path, payload)
-    for key in ("val_loss", "val_bpb", "artifact_size_bytes", "num_runs"):
-        print(f"{key}={metrics.get(key)}")
+    for key in ("val_loss", "val_bpb", "bytes_total", "bytes_code", "bytes_model_int8_zlib", "num_runs", "p_value"):
+        print(f"{key}={payload.get(key) if key != 'num_runs' else payload.get('num_runs')}")
     return 0
 
 

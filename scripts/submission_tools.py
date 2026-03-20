@@ -12,6 +12,13 @@ VALID_TRACKS = (
     "track_non_record_16mb",
 )
 
+TRACK_TO_JSON = {
+    "track_10min_16mb": "10min_16mb",
+    "track_non_record_16mb": "non_record_16mb",
+}
+
+JSON_TO_TRACK = {value: key for key, value in TRACK_TO_JSON.items()}
+
 REQUIRED_FILES = (
     "README.md",
     "submission.json",
@@ -38,14 +45,26 @@ METRIC_PATTERNS = {
         re.compile(r"val_bpb\s*[=:]\s*([0-9]+(?:\.[0-9]+)?)"),
         re.compile(r"bpb\s*[=:]\s*([0-9]+(?:\.[0-9]+)?)"),
     ),
-    "artifact_size_bytes": (
+    "bytes_total": (
+        re.compile(r"bytes_total\s*[=:]\s*([0-9]+)"),
         re.compile(r"artifact_size_bytes\s*[=:]\s*([0-9]+)"),
+        re.compile(r"artifact_bytes\s*[=:]\s*([0-9]+)"),
         re.compile(r"compressed(?:\s+artifact)?\s+size(?:\s+bytes)?\s*[=:]\s*([0-9]+)", re.IGNORECASE),
         re.compile(r"size_bytes\s*[=:]\s*([0-9]+)"),
+    ),
+    "bytes_code": (
+        re.compile(r"bytes_code\s*[=:]\s*([0-9]+)"),
+        re.compile(r"code_bytes\s*[=:]\s*([0-9]+)"),
+    ),
+    "bytes_model_int8_zlib": (
+        re.compile(r"bytes_model_int8_zlib\s*[=:]\s*([0-9]+)"),
     ),
     "num_runs": (
         re.compile(r"num_runs\s*[=:]\s*([0-9]+)"),
         re.compile(r"runs\s*[=:]\s*([0-9]+)"),
+    ),
+    "p_value": (
+        re.compile(r"p_value\s*[=:]\s*([0-9]+(?:\.[0-9]+)?)"),
     ),
 }
 
@@ -84,6 +103,56 @@ def write_submission_json(path: Path, payload: dict[str, Any]) -> None:
     path.write_text(json.dumps(payload, indent=2) + "\n", encoding="utf-8")
 
 
+def infer_track_dir(payload: dict[str, Any], submission_dir: Path | None = None) -> str | None:
+    raw_track = payload.get("track")
+    if raw_track in VALID_TRACKS:
+        return raw_track
+    if raw_track in JSON_TO_TRACK:
+        return JSON_TO_TRACK[raw_track]
+    if submission_dir and submission_dir.parent.name in VALID_TRACKS:
+        return submission_dir.parent.name
+    return None
+
+
+def infer_json_track(payload: dict[str, Any], submission_dir: Path | None = None) -> str | None:
+    raw_track = payload.get("track")
+    if raw_track in JSON_TO_TRACK:
+        return raw_track
+    if raw_track in VALID_TRACKS:
+        return TRACK_TO_JSON[raw_track]
+    track_dir = infer_track_dir(payload, submission_dir)
+    if track_dir:
+        return TRACK_TO_JSON[track_dir]
+    return None
+
+
+def get_submission_field(payload: dict[str, Any], field: str) -> Any:
+    metrics = payload.get("metrics", {})
+    if field == "name":
+        return payload.get("name") or payload.get("title")
+    if field == "author":
+        author = payload.get("author")
+        if isinstance(author, dict):
+            return author.get("name")
+        return author
+    if field == "github_id":
+        author = payload.get("author")
+        if isinstance(author, dict) and author.get("github"):
+            return author.get("github")
+        return payload.get("github_id")
+    if field == "blurb":
+        return payload.get("blurb") or payload.get("summary")
+    if field == "val_loss":
+        return payload.get("mean_val_loss", payload.get("val_loss", metrics.get("val_loss")))
+    if field == "val_bpb":
+        return payload.get("mean_val_bpb", payload.get("val_bpb", metrics.get("val_bpb")))
+    if field == "bytes_total":
+        return payload.get("bytes_total", payload.get("artifact_bytes", metrics.get("artifact_size_bytes")))
+    if field == "bytes_code":
+        return payload.get("bytes_code", payload.get("code_bytes"))
+    return payload.get(field)
+
+
 def extract_metrics_from_text(text: str) -> dict[str, float | int]:
     extracted: dict[str, float | int] = {}
     for metric_name, patterns in METRIC_PATTERNS.items():
@@ -92,7 +161,7 @@ def extract_metrics_from_text(text: str) -> dict[str, float | int]:
             matches.extend(pattern.findall(text))
         if matches:
             raw_value = matches[-1]
-            if metric_name in {"artifact_size_bytes", "num_runs"}:
+            if metric_name in {"bytes_total", "bytes_code", "bytes_model_int8_zlib", "num_runs"}:
                 extracted[metric_name] = int(raw_value)
             else:
                 extracted[metric_name] = float(raw_value)
@@ -126,44 +195,50 @@ def validate_metadata(submission_dir: Path, result: ValidationResult, mode: str)
         result.add(f"Invalid JSON in submission.json: {exc}", error=True)
         return
 
-    for key in ("title", "author", "track", "date", "summary", "metrics", "artifacts"):
-        if key not in payload:
-            result.add(f"submission.json is missing key: {key}", error=True)
+    for key in ("name", "author", "github_id", "date", "blurb"):
+        if key == "date":
+            if not str(payload.get("date", "")).strip():
+                add_issue(result, "submission.json date is empty.", mode)
+            continue
+        if not str(get_submission_field(payload, key) or "").strip():
+            add_issue(result, f"submission.json {key} is empty.", mode)
 
-    author = payload.get("author", {})
-    if not author.get("name"):
-        add_issue(result, "submission.json author.name is empty.", mode)
-    if not author.get("github"):
-        add_issue(result, "submission.json author.github is empty.", mode)
+    track_dir = infer_track_dir(payload, submission_dir)
+    json_track = infer_json_track(payload, submission_dir)
+    if track_dir is None:
+        allowed_tracks = sorted([*VALID_TRACKS, *JSON_TO_TRACK.keys()])
+        result.add(
+            f"submission.json track must map to one of: {', '.join(allowed_tracks)}",
+            error=True,
+        )
 
-    track = payload.get("track")
-    if track not in VALID_TRACKS:
-        result.add(f"submission.json track must be one of: {', '.join(VALID_TRACKS)}", error=True)
-
-    summary = str(payload.get("summary", "")).strip()
-    if not summary:
-        add_issue(result, "submission.json summary is empty.", mode)
-
-    metrics = payload.get("metrics", {})
-    for metric_name in ("val_loss", "val_bpb", "artifact_size_bytes", "num_runs"):
-        if metric_name not in metrics:
-            result.add(f"submission.json metrics is missing key: {metric_name}", error=True)
-        elif metrics[metric_name] is None:
-            add_issue(result, f"submission.json metrics.{metric_name} is null.", mode)
+    for metric_name in ("val_loss", "val_bpb", "bytes_total", "bytes_code"):
+        if get_submission_field(payload, metric_name) is None:
+            add_issue(result, f"submission.json {metric_name} is null or missing.", mode)
 
     expected_track = submission_dir.parent.name
-    if track in VALID_TRACKS and expected_track in VALID_TRACKS and track != expected_track:
+    if track_dir and expected_track in VALID_TRACKS and track_dir != expected_track:
         result.add(
-            f"submission.json track '{track}' does not match parent directory '{expected_track}'.",
+            f"submission.json track '{json_track or track_dir}' does not match parent directory '{expected_track}'.",
             error=True,
         )
 
     expected_date_prefix = submission_dir.name.split("_", 1)[0]
     json_date = str(payload.get("date", ""))
-    if json_date and expected_date_prefix != json_date:
+    if json_date:
+        normalized_json_date = json_date.split("T", 1)[0]
+        if expected_date_prefix != normalized_json_date:
+            add_issue(
+                result,
+                f"submission.json date '{json_date}' does not match directory prefix '{expected_date_prefix}'.",
+                mode,
+            )
+
+    seed_results = payload.get("seed_results")
+    if seed_results is not None and not isinstance(seed_results, dict):
         add_issue(
             result,
-            f"submission.json date '{json_date}' does not match directory prefix '{expected_date_prefix}'.",
+            "submission.json seed_results must be an object when provided.",
             mode,
         )
 
@@ -204,21 +279,25 @@ def collect_submission_rows(base_dir: Path, track: str | None = None) -> list[di
     for json_path in sorted(base_dir.glob("*/**/submission.json")):
         submission_dir = json_path.parent
         payload = read_submission_json(json_path)
-        row_track = payload.get("track") or submission_dir.parent.name
+        row_track = infer_track_dir(payload, submission_dir) or submission_dir.parent.name
         if track and row_track != track:
             continue
-        metrics = payload.get("metrics", {})
         rows.append(
             {
                 "path": str(submission_dir),
                 "track": row_track,
                 "date": payload.get("date"),
-                "title": payload.get("title"),
-                "summary": payload.get("summary"),
-                "val_loss": metrics.get("val_loss"),
-                "val_bpb": metrics.get("val_bpb"),
-                "artifact_size_bytes": metrics.get("artifact_size_bytes"),
-                "num_runs": metrics.get("num_runs"),
+                "title": get_submission_field(payload, "name"),
+                "summary": get_submission_field(payload, "blurb"),
+                "author": get_submission_field(payload, "author"),
+                "github_id": get_submission_field(payload, "github_id"),
+                "val_loss": get_submission_field(payload, "val_loss"),
+                "val_bpb": get_submission_field(payload, "val_bpb"),
+                "artifact_size_bytes": get_submission_field(payload, "bytes_total"),
+                "bytes_code": get_submission_field(payload, "bytes_code"),
+                "num_runs": payload.get("num_runs")
+                or payload.get("metrics", {}).get("num_runs")
+                or (len(payload.get("seed_results", {})) or None),
             }
         )
     return rows
@@ -236,7 +315,9 @@ def export_submission(
         raise ValueError(f"Submission did not pass validation:\n{joined}")
 
     payload = read_submission_json(submission_dir / "submission.json")
-    track = payload["track"]
+    track = infer_track_dir(payload, submission_dir)
+    if track is None:
+        raise ValueError("Could not determine submission track from submission.json or directory structure.")
     records_dir = upstream_repo / "records"
     if not records_dir.exists():
         raise ValueError(f"Upstream repo does not look valid (missing records/): {upstream_repo}")

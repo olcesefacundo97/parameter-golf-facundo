@@ -30,6 +30,15 @@ python3 data/cached_challenge_fineweb.py --variant sp1024 --train-shards 1
 
 Si estás en Apple Silicon, podés usar la ruta MLX del repo oficial. Si no, usá la ruta estándar CUDA en una máquina remota.
 
+Si querés saltar directo a una máquina remota y arrancar desde el SOTA público actual, podés usar:
+
+```bash
+cd /workspace
+git clone https://github.com/olcesefacundo97/parameter-golf-facundo.git
+cd parameter-golf-facundo
+bash scripts/runpod_attack_sota.sh
+```
+
 ## Paso 5: elegir estrategia
 
 Algunas líneas de exploración razonables:

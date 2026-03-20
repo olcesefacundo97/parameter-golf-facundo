@@ -29,6 +29,7 @@ def parse_args() -> argparse.Namespace:
 def parse_env_file(path: Path) -> tuple[dict[str, str], list[str]]:
     env_vars: dict[str, str] = {}
     command: list[str] | None = None
+    train_script: str | None = None
     for raw_line in path.read_text(encoding="utf-8").splitlines():
         line = raw_line.strip()
         if not line or line.startswith("#"):
@@ -36,10 +37,14 @@ def parse_env_file(path: Path) -> tuple[dict[str, str], list[str]]:
         key, value = line.split("=", 1)
         if key == "COMMAND":
             command = shlex.split(value)
+        elif key == "TRAIN_SCRIPT":
+            train_script = value
         else:
             env_vars[key] = value
     if command is None:
         raise SystemExit(f"Campaign file is missing COMMAND=: {path}")
+    if train_script is not None:
+        env_vars["__TRAIN_SCRIPT__"] = train_script
     return env_vars, command
 
 
@@ -48,8 +53,9 @@ def main() -> int:
     campaign_path = Path(args.campaign)
     upstream_repo = Path(args.upstream_repo)
     env_vars, command = parse_env_file(campaign_path)
+    train_script = env_vars.pop("__TRAIN_SCRIPT__", None)
+    train_script_path = (upstream_repo / train_script).resolve() if train_script else upstream_repo / "train_gpt.py"
 
-    full_command = ["env"] + [f"{key}={value}" for key, value in env_vars.items()] + command
     run_cmd = [
         sys.executable,
         str(REPO_ROOT / "scripts" / "run_submission.py"),
@@ -68,10 +74,11 @@ def main() -> int:
         "--workdir",
         str(upstream_repo),
         "--train-script",
-        str(upstream_repo / "train_gpt.py"),
-        "--",
-        *full_command,
+        str(train_script_path),
     ]
+    for key, value in env_vars.items():
+        run_cmd.extend(["--env", f"{key}={value}"])
+    run_cmd.extend(["--", *command])
 
     if args.dry_run:
         print(shlex.join(run_cmd))

@@ -24,12 +24,14 @@ Repositorio oficial:
 - `docs/roadmap.md`: roadmap corto para pasar de cero a una primera corrida.
 - `docs/submission-workflow.md`: guía para preparar una submission reproducible antes de llevarla al repo oficial.
 - `scripts/validate_submission.py`: valida una submission en modo `draft` o `submission` para detectar placeholders, métricas faltantes y problemas de estructura.
-- `scripts/update_submission_metrics.py`: extrae métricas desde `train.log` y actualiza `submission.json`, con overrides manuales opcionales.
+- `scripts/update_submission_metrics.py`: extrae métricas desde `train.log` y actualiza `submission.json` con un schema alineado a los records oficiales.
 - `scripts/export_submission.py`: copia una submission validada al árbol `records/` de un clon local del repo oficial.
 - `scripts/report_submissions.py`: recorre submissions locales y muestra un reporte ordenable por métricas para comparar runs.
 - `scripts/run_submission.py`: crea un scaffold, ejecuta un comando real, captura `train.log` y sincroniza métricas automáticamente.
 - `scripts/run_campaign.py`: lanza presets de campaña contra un clon local de `openai/parameter-golf`.
+- `scripts/runpod_attack_sota.sh`: bootstrap para Runpod que clona repos, baja FineWeb y lanza la campaña starter del SOTA.
 - `campaigns/*.env`: presets de experimentos inspirados por ideas públicas competitivas (baseline, long context, sliding eval, LoRA TTT).
+- `campaigns/attack_sota_record_starter.env`: preset para correr directamente el script del récord público actual y usarlo como base de trabajo.
 - `records/track_non_record_16mb/2026-03-20_local_bigram_smoke`: example of a truthful local non-record submission generated in this repo.
 
 ## Uso rápido
@@ -74,6 +76,27 @@ python3 scripts/run_campaign.py \
   --summary "Long context + smoke run local"
 ```
 
+Starter directo contra el SOTA público actual:
+
+```bash
+python3 scripts/run_campaign.py \
+  --campaign campaigns/attack_sota_record_starter.env \
+  --upstream-repo ./upstream/parameter-golf \
+  --slug attack-sota-seed1 \
+  --author-name "Tu Nombre" \
+  --github-id tu_github \
+  --summary "Starter run from current public SOTA script"
+```
+
+O en un pod Linux de Runpod, con bootstrap de una sola vez:
+
+```bash
+cd /workspace
+git clone https://github.com/olcesefacundo97/parameter-golf-facundo.git
+cd parameter-golf-facundo
+bash scripts/runpod_attack_sota.sh
+```
+
 Corré una submission local de punta a punta:
 
 ```bash
@@ -83,7 +106,7 @@ python3 scripts/run_submission.py \
   --author-name "Tu Nombre" \
   --github-id tu_github \
   --summary "Smoke test local" \
-  -- python3 -c "print('val_loss=1.23 val_bpb=0.98 artifact_size_bytes=12345678 num_runs=1')"
+  -- python3 -c "print('val_loss=1.23 val_bpb=0.98 bytes_total=12345678 num_runs=1')"
 ```
 
 Completá o sincronizá métricas desde el log:
@@ -133,3 +156,5 @@ Si querés avanzar rápido:
 ## Nota
 
 El código, reglas y leaderboard viven en el repo oficial de OpenAI. Este repo es solo un wrapper liviano para arrancar con menos fricción.
+
+Las `submission.json` generadas por este repo siguen el formato real que hoy aparece en `openai/parameter-golf/records`, para evitar retrabajo antes de abrir un PR.
