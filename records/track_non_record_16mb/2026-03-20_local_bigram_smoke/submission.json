@@ -1,0 +1,27 @@
+{
+  "title": "2026-03-20 / local bigram smoke",
+  "author": {
+    "name": "Facundo",
+    "github": "facundo"
+  },
+  "track": "track_non_record_16mb",
+  "date": "2026-03-20",
+  "summary": "Deterministic local bigram smoke baseline executed in this environment",
+  "metrics": {
+    "val_loss": 3.688879,
+    "val_bpb": 5.321928,
+    "artifact_size_bytes": 1241,
+    "num_runs": 1
+  },
+  "artifacts": {
+    "train_log": "train.log",
+    "train_script": "train_gpt.py",
+    "extra_files": [
+      "local_bigram_artifact.json"
+    ]
+  },
+  "notes": [
+    "Truthful local smoke run executed in this repository.",
+    "Not intended as a competitive official leaderboard submission."
+  ]
+}

@@ -1,0 +1,88 @@
+{
+  "model": {
+    "parameter": {
+      "golf": 1
+    },
+    "golf": {
+      "rewards": 1
+    },
+    "rewards": {
+      "compact,": 1
+    },
+    "compact,": {
+      "clever": 1
+    },
+    "clever": {
+      "language": 1
+    },
+    "language": {
+      "modeling": 1
+    },
+    "modeling": {
+      "systems.": 1
+    },
+    "systems.": {
+      "small": 1
+    },
+    "small": {
+      "models": 1
+    },
+    "models": {
+      "can": 1
+    },
+    "can": {
+      "still": 1
+    },
+    "still": {
+      "be": 1
+    },
+    "be": {
+      "useful": 1
+    },
+    "useful": {
+      "when": 1
+    },
+    "when": {
+      "the": 1
+    },
+    "the": {
+      "inductive": 1
+    },
+    "inductive": {
+      "bias": 1
+    },
+    "bias": {
+      "is": 1
+    },
+    "is": {
+      "strong.": 1
+    },
+    "strong.": {
+      "context": 1
+    },
+    "context": {
+      "length,": 1
+    },
+    "length,": {
+      "evaluation": 1
+    },
+    "evaluation": {
+      "tricks,": 1
+    },
+    "tricks,": {
+      "weight": 1
+    },
+    "weight": {
+      "sharing": 1
+    },
+    "sharing": {
+      "and": 1
+    },
+    "and": {
+      "adaptation": 1
+    }
+  },
+  "train_token_count": 28,
+  "val_token_count": 13,
+  "description": "Deterministic local bigram smoke baseline."
+}
